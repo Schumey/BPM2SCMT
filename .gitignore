@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+.vs/
+bpm-log.csv
+bpm.txt
+/test-audio/
+/publish/
