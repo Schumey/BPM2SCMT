@@ -1,6 +1,6 @@
 using NAudio.Dsp;
 
-namespace BpmProbe;
+namespace BPM2SCMT;
 
 /// <summary>One estimate: the tempo, how clearly it stands out (0 to 1), and how loud the audio was.</summary>
 internal sealed record TempoEstimate(double Bpm, double Confidence, double Level);

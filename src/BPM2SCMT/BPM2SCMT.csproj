@@ -1,14 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Prototype: measures the tempo of what the PC plays (WASAPI loopback), for a BPM display in SCMT. -->
+  <!-- Measures the tempo of what the PC plays (WASAPI loopback) and writes it to a file that HASS.Agent reads, for the
+       BPM display of SCMT. A Windows program without a window; it opens a console only when asked. -->
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <AssemblyName>BpmProbe</AssemblyName>
-    <RootNamespace>BpmProbe</RootNamespace>
+    <AssemblyName>BPM2SCMT</AssemblyName>
+    <RootNamespace>BPM2SCMT</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
