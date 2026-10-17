@@ -1,0 +1,43 @@
+# A tag v* builds BPM2SCMT.exe and attaches it, with its SHA-256, to a GitHub release of that tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet publish src/BPM2SCMT/BPM2SCMT.csproj -c Release -o publish
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash publish/BPM2SCMT.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  BPM2SCMT.exe" | Out-File publish/BPM2SCMT.exe.sha256 -Encoding ascii -NoNewline
+
+      - name: Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag.TrimStart('v')
+          # The notes are the section of this version in CHANGELOG.md.
+          $notes = (Get-Content CHANGELOG.md -Raw) -split '(?m)^## ' |
+            Where-Object { $_ -like "$version *" } | Select-Object -First 1
+          $notes = ($notes -replace '^[^\r\n]*\r?\n', '').Trim()
+          if (-not $notes) { $notes = "BPM2SCMT $version" }
+          $notes | Out-File notes.md -Encoding utf8
+          gh release create $tag publish/BPM2SCMT.exe publish/BPM2SCMT.exe.sha256 --title "BPM2SCMT $version" --notes-file notes.md

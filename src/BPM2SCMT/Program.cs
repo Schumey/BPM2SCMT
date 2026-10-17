@@ -7,6 +7,7 @@
 //   BPM2SCMT --stop           ends the instance that runs.
 //   BPM2SCMT --autostart on   starts with Windows (off: no longer).
 //   BPM2SCMT <audio file>     measures a file (mp3, wav, m4a ...) and prints the tempo second by second.
+//   BPM2SCMT --help           lists these commands; --version prints the version.
 //
 // The track comes from Windows' media controls (the same source HASS.Agent uses): a new track starts the measurement
 // again, and while nothing plays the file is empty.
@@ -43,25 +44,64 @@ try
             if (EventWaitHandle.TryOpenExisting(StopName, out var stop))
             {
                 stop.Set();
-                Console.WriteLine("BPM2SCMT wird beendet.");
+                Console.WriteLine("BPM2SCMT is stopping.");
             }
             else
             {
-                Console.WriteLine("BPM2SCMT läuft nicht.");
+                Console.WriteLine("BPM2SCMT is not running.");
             }
             return 0;
         case "--autostart":
             OpenConsole(allocate: false);
-            return Autostart(args.Length > 1 && args[1].Equals("on", StringComparison.OrdinalIgnoreCase));
+            var mode = args.Length > 1 ? args[1].ToLowerInvariant() : "";
+            if (mode is not ("on" or "off")) return Help(2);
+            return Autostart(mode == "on");
+        case "--version":
+            OpenConsole(allocate: false);
+            Console.WriteLine($"BPM2SCMT {Version()}");
+            return 0;
+        case "--help" or "-h" or "-?" or "/?":
+            OpenConsole(allocate: false);
+            return Help(0);
         default:
             OpenConsole(allocate: true);
+            if (first.StartsWith('-')) return Help(2);
+            if (!File.Exists(args[0]))
+            {
+                Console.WriteLine($"No such file: {args[0]}");
+                return Help(2);
+            }
             return AnalyzeFile(args[0]);
     }
 }
 catch (Exception ex)
 {
-    File.AppendAllText(Path.Combine(dataDir, "error.log"), $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {ex}\r\n");
+    var errorLog = Path.Combine(dataDir, "error.log");
+    File.AppendAllText(errorLog, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {Version()} {ex}\r\n");
+    try { Console.Error.WriteLine($"Error: {ex.Message} (details in {errorLog})"); }
+    catch { /* no console */ }
     return 1;
+}
+
+static string Version() => typeof(TempoDetector).Assembly.GetName().Version?.ToString(3) ?? "?";
+
+static int Help(int code)
+{
+    Console.WriteLine($"""
+        BPM2SCMT {Version()}: measures the tempo of what this PC plays and writes it to
+        C:\ProgramData\BPM2SCMT\bpm.txt (empty while nothing plays).
+
+          BPM2SCMT                  runs in the background, without a window
+          BPM2SCMT --console        the same in a window that shows the tempo every second
+          BPM2SCMT --log            in the background, and writes bpm-log.csv
+          BPM2SCMT --stop           ends the BPM2SCMT that runs
+          BPM2SCMT --autostart on   starts with Windows (off: no longer)
+          BPM2SCMT <audio file>     measures a file (mp3, wav, m4a ...)
+          BPM2SCMT --version        prints the version
+
+        https://github.com/Schumey/BPM2SCMT
+        """);
+    return code;
 }
 
 // A program without a window has no console: take the one of the command line it was started from, or open one.
@@ -78,18 +118,18 @@ static int Autostart(bool on)
     if (on)
     {
         run.SetValue("BPM2SCMT", $"\"{Environment.ProcessPath}\"");
-        Console.WriteLine($"BPM2SCMT startet jetzt mit Windows ({Environment.ProcessPath}).");
+        Console.WriteLine($"BPM2SCMT now starts with Windows ({Environment.ProcessPath}).");
     }
     else
     {
         run.DeleteValue("BPM2SCMT", throwOnMissingValue: false);
-        Console.WriteLine("BPM2SCMT startet nicht mehr mit Windows.");
+        Console.WriteLine("BPM2SCMT no longer starts with Windows.");
     }
     return 0;
 }
 
 static string Show(TempoEstimate? e) =>
-    e is null ? "  -   " : $"{e.Bpm,6:0.0} BPM  sicher {e.Confidence:0.00}  Pegel {20 * Math.Log10(e.Level),5:0} dB";
+    e is null ? "  -   " : $"{e.Bpm,6:0.0} BPM  confidence {e.Confidence:0.00}  level {20 * Math.Log10(e.Level),5:0} dB";
 
 static void Mix(ReadOnlySpan<float> interleaved, int channels, Span<float> mono)
 {
@@ -114,7 +154,7 @@ static int AnalyzeFile(string path)
     var mono = new float[rate];
     var second = 0;
     int read;
-    Console.WriteLine($"{Path.GetFileName(path)} ({rate} Hz, {channels} Kanäle)");
+    Console.WriteLine($"{Path.GetFileName(path)} ({rate} Hz, {channels} channels)");
     while ((read = samples.Read(buffer, 0, buffer.Length)) > 0)
     {
         Mix(buffer.AsSpan(0, read), channels, mono);
@@ -122,9 +162,9 @@ static int AnalyzeFile(string path)
         second++;
         var e = detector.Estimate();
         stable.Add(e);
-        Console.WriteLine($"{second,4} s  {Show(e)}  angezeigt: {(stable.Value is { } v ? $"{v:0.0}" : "-")}");
+        Console.WriteLine($"{second,4} s  {Show(e)}  shown: {(stable.Value is { } v ? $"{v:0.0}" : "-")}");
     }
-    Console.WriteLine($"Ergebnis: {(stable.Value is { } r ? $"{r:0.0} BPM" : "keins")}");
+    Console.WriteLine($"Result: {(stable.Value is { } r ? $"{r:0.0} BPM" : "none")}");
     return 0;
 }
 
@@ -133,7 +173,7 @@ static async Task<int> Live(string dataDir, bool console, bool log)
     using var single = new Mutex(true, @"Local\BPM2SCMT", out var firstInstance);
     if (!firstInstance)
     {
-        if (console) Console.WriteLine("BPM2SCMT läuft schon. Erst mit --stop beenden.");
+        if (console) Console.WriteLine("BPM2SCMT is already running. End it with --stop first.");
         return 0;
     }
     using var stop = new EventWaitHandle(false, EventResetMode.AutoReset, StopName);
@@ -147,23 +187,23 @@ static async Task<int> Live(string dataDir, bool console, bool log)
         var newLog = !File.Exists(logPath);
         logFile = new StreamWriter(logPath, append: true) { AutoFlush = true };
         if (newLog) await logFile.WriteLineAsync("time;artist;title;status;bpm;confidence;level_db;shown");
-        if (console) Console.WriteLine($"Protokoll: {logPath}");
+        if (console) Console.WriteLine($"Log: {logPath}");
     }
 
     GlobalSystemMediaTransportControlsSessionManager? media = null;
     try { media = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync(); }
-    catch (Exception ex) { if (console) Console.WriteLine($"Medien-Steuerung nicht erreichbar ({ex.Message})."); }
+    catch (Exception ex) { if (console) Console.WriteLine($"Media controls not available ({ex.Message})."); }
 
     using var capture = new LoopbackCapture();
     var stable = new Stabilizer();
     var track = "";
     string? written = null;
-    if (console) Console.WriteLine($"Schreibt nach {valuePath}. Beenden mit Strg+C.");
+    if (console) Console.WriteLine($"BPM2SCMT {Version()} writes to {valuePath}. Ctrl+C ends it.");
 
     while (!stop.WaitOne(1000))
     {
         // Follow the default output device (headphones plugged in, another screen).
-        if (capture.Ensure() is { } device && console) Console.WriteLine($"Höre auf „{device}“.");
+        if (capture.Ensure() is { } device && console) Console.WriteLine($"Listening to \"{device}\".");
 
         string artist = "", title = "", status = "";
         if (media is not null)
@@ -199,7 +239,7 @@ static async Task<int> Live(string dataDir, bool console, bool log)
         stable.Add(e);
 
         var shown = stable.Value is { } v ? Math.Round(v).ToString("0") : "";
-        if (console) Console.WriteLine($"{DateTime.Now:HH:mm:ss}  {Show(e)}  angezeigt: {(shown.Length > 0 ? shown : "-")}");
+        if (console) Console.WriteLine($"{DateTime.Now:HH:mm:ss}  {Show(e)}  shown: {(shown.Length > 0 ? shown : "-")}");
         if (logFile is not null)
             await logFile.WriteLineAsync(string.Join(';',
                 DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), Csv(artist), Csv(title), status,

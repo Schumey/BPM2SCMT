@@ -10,6 +10,20 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyName>BPM2SCMT</AssemblyName>
     <RootNamespace>BPM2SCMT</RootNamespace>
+    <Version>1.0.0</Version>
+    <Product>BPM2SCMT</Product>
+    <Description>Measures the tempo of the music a Windows PC plays, for the tempo line of SCMT.</Description>
+    <Copyright>Copyright (c) 2026 Schumey</Copyright>
+  </PropertyGroup>
+
+  <!-- dotnet publish -c Release: one exe that needs no installed .NET. -->
+  <PropertyGroup>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
